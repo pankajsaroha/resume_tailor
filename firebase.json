@@ -1,0 +1,28 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "resume-tailor-e999d",
+          "appId": "1:146685693279:android:55e6e588afb4193b83baea",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "resume-tailor-e999d",
+          "configurations": {
+            "android": "1:146685693279:android:55e6e588afb4193b83baea",
+            "ios": "1:146685693279:ios:4ba1691e4e9f508983baea",
+            "macos": "1:146685693279:ios:46a4ef4f9ec6b05f83baea",
+            "web": "1:146685693279:web:71840f94b14760cc83baea",
+            "windows": "1:146685693279:web:4c70304a48c808f483baea"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "functions"
+  }
+}

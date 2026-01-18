@@ -1,4 +1,4 @@
-package com.example.resume_tailor
+package com.tailor.resume
 
 import io.flutter.embedding.android.FlutterActivity
 

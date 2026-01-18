@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "146685693279",
+    "project_id": "resume-tailor-e999d",
+    "storage_bucket": "resume-tailor-e999d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:146685693279:android:55e6e588afb4193b83baea",
+        "android_client_info": {
+          "package_name": "com.tailor.resume"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwV5ck-Jos3iuCghMvbmig9NsJz_whKPc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
