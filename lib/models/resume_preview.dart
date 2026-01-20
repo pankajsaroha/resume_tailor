@@ -21,14 +21,20 @@ class ResumePreview {
   }
 
   factory ResumePreview.fromMap(Map<String, dynamic> map) {
-    final sections = (map['sections'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .map(ResumeSection.fromMap)
+    final rawSections = map['sections'];
+    final sections = (rawSections is List ? rawSections : const [])
+        .whereType<Map>()
+        .map((section) =>
+            ResumeSection.fromMap(Map<String, dynamic>.from(section)))
         .toList();
+    final keywordMatchValue = map['keywordMatch'];
+    final keywordMatch = keywordMatchValue is num
+        ? keywordMatchValue.toInt()
+        : int.tryParse(keywordMatchValue?.toString() ?? '') ?? 0;
     return ResumePreview(
       name: map['name'] as String? ?? '',
       role: map['role'] as String? ?? '',
-      keywordMatch: (map['keywordMatch'] as int?) ?? 0,
+      keywordMatch: keywordMatch,
       sections: sections,
     );
   }

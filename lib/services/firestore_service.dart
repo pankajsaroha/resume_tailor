@@ -11,6 +11,7 @@ class FirestoreService {
   FirestoreService._();
 
   static final FirestoreService instance = FirestoreService._();
+  static bool _loggedAiResponse = false;
 
   Future<bool> createRequestWithResumeText({
     required String resumeText,
@@ -127,6 +128,10 @@ class FirestoreService {
         'requestId': requestId,
       });
       final data = result.data as Map<String, dynamic>;
+      if (!_loggedAiResponse) {
+        debugPrint('AI raw response: $data');
+        _loggedAiResponse = true;
+      }
       debugPrint('AI response received');
       if (data['status'] == 'error') {
         throw Exception(data['message'] ?? 'AI failed');

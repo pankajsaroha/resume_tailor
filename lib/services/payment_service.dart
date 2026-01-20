@@ -1,3 +1,5 @@
+import 'package:cloud_functions/cloud_functions.dart';
+
 import 'auth_service.dart';
 
 class PaymentService {
@@ -11,6 +13,18 @@ class PaymentService {
     required String currency,
   }) async {
     await AuthService.instance.ensureAuthenticated();
+    try {
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('createPaymentOrder');
+      final result = await callable.call({
+        'requestId': requestId,
+        'amount': amount,
+        'currency': currency,
+      });
+      return result.data as Map<String, dynamic>?;
+    } on FirebaseFunctionsException {
+    } catch (error) {
+    }
     return null;
   }
 
@@ -21,6 +35,19 @@ class PaymentService {
     required String signature,
   }) async {
     await AuthService.instance.ensureAuthenticated();
+    try {
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('verifyPayment');
+      final result = await callable.call({
+        'requestId': requestId,
+        'orderId': orderId,
+        'paymentId': paymentId,
+        'signature': signature,
+      });
+      final data = result.data as Map<String, dynamic>?;
+      return data?['verified'] == true;
+    } catch (error) {
+    }
     return false;
   }
 }

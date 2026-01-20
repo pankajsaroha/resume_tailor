@@ -1,11 +1,15 @@
 const admin = require("firebase-admin");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const Razorpay = require("razorpay");
 const fetch = require("node-fetch");
+const crypto = require("crypto");
 
 admin.initializeApp();
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const RAZORPAY_KEY_ID = defineSecret("RAZORPAY_KEY_ID");
+const RAZORPAY_KEY_SECRET = defineSecret("RAZORPAY_KEY_SECRET");
 
 exports.generateTailoredResumeAI = onCall(
   { secrets: [OPENAI_API_KEY] },
@@ -107,5 +111,85 @@ ${jobDescription}
       console.error("FUNCTION_ERROR", err);
       throw err;
     }
+  }
+);
+
+exports.createPaymentOrder = onCall(
+  { secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET] },
+  async (request) => {
+    const { data, auth } = request;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Authentication required");
+    }
+    const { requestId, amount, currency } = data || {};
+    if (!requestId || !amount || !currency) {
+      throw new HttpsError(
+        "invalid-argument",
+        "requestId, amount, and currency are required"
+      );
+    }
+    try {
+      const razorpay = new Razorpay({
+        key_id: RAZORPAY_KEY_ID.value(),
+        key_secret: RAZORPAY_KEY_SECRET.value(),
+      });
+
+      const order = await razorpay.orders.create({
+        amount,
+        currency,
+        receipt: `receipt_${requestId}`,
+      });
+
+      return {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        keyId: RAZORPAY_KEY_ID.value(),
+      };
+    } catch (err) {
+      throw new HttpsError("internal", "Order creation failed");
+    }
+  }
+);
+
+exports.verifyPayment = onCall(
+  { secrets: [RAZORPAY_KEY_SECRET] },
+  async (request) => {
+    const { data, auth } = request;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Authentication required");
+    }
+    const { orderId, paymentId, signature, requestId } = data || {};
+    if (!orderId || !paymentId || !signature || !requestId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "orderId, paymentId, signature, requestId are required"
+      );
+    }
+
+    const body = `${orderId}|${paymentId}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", RAZORPAY_KEY_SECRET.value())
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      return { verified: false };
+    }
+
+    await admin
+      .firestore()
+      .collection("resumeRequests")
+      .doc(requestId)
+      .set(
+        {
+          paid: true,
+          paymentId,
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    return { verified: true };
   }
 );
