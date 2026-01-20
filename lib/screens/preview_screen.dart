@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/resume_preview.dart';
 import '../routes.dart';
 import '../services/firestore_service.dart';
+import '../services/pdf_service.dart';
 
 class PreviewScreen extends StatefulWidget {
   const PreviewScreen({super.key});
@@ -173,50 +174,67 @@ class _PreviewScreenState extends State<PreviewScreen> {
             ),
             child: SizedBox(
               width: double.infinity,
-              child: FilledButton(
-                onPressed: _isNavigating
+              child: StreamBuilder<bool>(
+                stream: requestId == null
                     ? null
-                    : () async {
-                        setState(() {
-                          _isNavigating = true;
-                        });
-                        await Navigator.pushReplacementNamed(
-                          context,
-                          AppRoutes.payment,
-                          arguments: {
-                            'preview': preview,
-                            'requestId': requestId,
+                    : FirestoreService.instance.paidStream(requestId),
+                builder: (context, snapshot) {
+                  final paid = snapshot.data == true;
+                  return FilledButton(
+                    onPressed: _isNavigating
+                        ? null
+                        : () async {
+                            setState(() {
+                              _isNavigating = true;
+                            });
+                            if (paid) {
+                              if (requestId != null) {
+                                await PdfService.generateAndSave(
+                                  preview: preview,
+                                  requestId: requestId,
+                                );
+                              }
+                            } else {
+                              await Navigator.pushReplacementNamed(
+                                context,
+                                AppRoutes.payment,
+                                arguments: {
+                                  'preview': preview,
+                                  'requestId': requestId,
+                                },
+                              );
+                            }
+                            if (mounted) {
+                              setState(() {
+                                _isNavigating = false;
+                              });
+                            }
                           },
-                        );
-                        if (mounted) {
-                          setState(() {
-                            _isNavigating = false;
-                          });
-                        }
-                      },
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF001F3F),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: _isNavigating
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Download ₹9',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF001F3F),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                    ),
+                    child: _isNavigating
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            paid ? 'Download PDF' : 'Download ₹9',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  );
+                },
               ),
             ),
           ),
