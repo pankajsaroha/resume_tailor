@@ -1,7 +1,6 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-import '../models/resume_preview.dart';
 import '../routes.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 
 class JobDescriptionScreen extends StatefulWidget {
@@ -14,11 +13,28 @@ class JobDescriptionScreen extends StatefulWidget {
 class _JobDescriptionScreenState extends State<JobDescriptionScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isNavigating = false;
+  bool _isValid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_updateValidity);
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_updateValidity);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _updateValidity() {
+    final isValid = _controller.text.trim().isNotEmpty;
+    if (isValid != _isValid) {
+      setState(() {
+        _isValid = isValid;
+      });
+    }
   }
 
   @override
@@ -46,7 +62,7 @@ class _JobDescriptionScreenState extends State<JobDescriptionScreen> {
                       ),
                       contentPadding: const EdgeInsets.all(16),
                     ),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) => _updateValidity(),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -83,17 +99,40 @@ class _JobDescriptionScreenState extends State<JobDescriptionScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _isNavigating
+                  onPressed: _isNavigating || !_isValid
                       ? null
                       : () async {
+                          try {
+                            await AuthService.instance.ensureAuthenticated();
+                          } catch (_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Auth required. Please retry.'),
+                                ),
+                              );
+                            }
+                            return;
+                          }
+                          final args = ModalRoute.of(context)?.settings.arguments
+                              as Map<String, dynamic>?;
+                          final requestId = args?['requestId'] as String?;
+                          final resumeText = args?['resumeText'] as String?;
+                          if (requestId == null || resumeText == null) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Missing request. Try again.'),
+                                ),
+                              );
+                            }
+                            return;
+                          }
                           setState(() {
                             _isNavigating = true;
                           });
-                          final preview = ResumePreview.mock();
-                          final requestId = _generateRequestId();
                           final saved =
-                              await FirestoreService.instance.saveJobRequest(
-                            preview: preview,
+                              await FirestoreService.instance.updateJobDescription(
                             jobDescription: _controller.text.trim(),
                             requestId: requestId,
                           );
@@ -108,9 +147,9 @@ class _JobDescriptionScreenState extends State<JobDescriptionScreen> {
                             context,
                             AppRoutes.processing,
                             arguments: {
-                              'preview': preview,
                               'requestId': requestId,
                               'jobDescription': _controller.text.trim(),
+                              'resumeText': resumeText,
                             },
                           );
                           if (mounted) {
@@ -151,9 +190,4 @@ class _JobDescriptionScreenState extends State<JobDescriptionScreen> {
     );
   }
 
-  String _generateRequestId() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final rand = Random().nextInt(1000000).toString().padLeft(6, '0');
-    return 'req_$now$rand';
-  }
 }

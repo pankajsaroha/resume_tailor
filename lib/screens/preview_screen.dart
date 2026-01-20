@@ -30,6 +30,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
     }
 
+    debugPrint(
+      'Preview keywordMatch=${preview.keywordMatch} sections=${preview.sections.length}',
+    );
+
     final sections = preview.sections;
     final ResumeSection? firstSection =
         sections.isNotEmpty ? sections.first : null;

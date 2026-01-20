@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'routes.dart';
+import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await AuthService.instance.ensureAuthenticated();
+  final user = FirebaseAuth.instance.currentUser;
+  final token = await user?.getIdToken();
+  // One-time token check for debugging auth propagation
+  // ignore: avoid_print
+  print('Auth token available: ${token != null}');
   runApp(const ResumeTailorApp());
 }
 

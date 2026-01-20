@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:downloads_path_provider_28/downloads_path_provider_28.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
@@ -36,7 +36,7 @@ class PdfService {
                   preview.role,
                   style: pw.TextStyle(
                     fontSize: 16,
-                    color: pw.PdfColors.grey700,
+                    color: PdfColors.grey700,
                   ),
                 ),
                 pw.SizedBox(height: 16),
@@ -66,7 +66,7 @@ class PdfService {
 
     final bytes = await doc.save();
     if (Platform.isAndroid) {
-      final downloadsDir = await DownloadsPathProvider.downloadsDirectory;
+      final downloadsDir = await getDownloadsDirectory();
       final dir = downloadsDir ?? await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/resume_$requestId.pdf');
       await file.writeAsBytes(bytes);

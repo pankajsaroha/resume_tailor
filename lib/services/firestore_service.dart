@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../models/resume_preview.dart';
 import 'auth_service.dart';
@@ -10,20 +12,17 @@ class FirestoreService {
 
   static final FirestoreService instance = FirestoreService._();
 
-  Future<bool> saveJobRequest({
-    required ResumePreview preview,
-    required String jobDescription,
+  Future<bool> createRequestWithResumeText({
+    required String resumeText,
     required String requestId,
   }) async {
-    await AuthService.instance.signInAnonymously();
+    await AuthService.instance.ensureAuthenticated();
     try {
       await FirebaseFirestore.instance
           .collection('resumeRequests')
           .doc(requestId)
           .set({
-        ...preview.toMap(),
-        'jobDescription': jobDescription,
-        'keywordMatch': preview.keywordMatch,
+        'resumeText': resumeText,
         'requestId': requestId,
         'paid': false,
         'createdAt': FieldValue.serverTimestamp(),
@@ -35,11 +34,50 @@ class FirestoreService {
     return false;
   }
 
+  Future<bool> verifyResumeTextStored({
+    required String requestId,
+    required String resumeText,
+  }) async {
+    await AuthService.instance.ensureAuthenticated();
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('resumeRequests')
+          .doc(requestId)
+          .get();
+      final stored = doc.data()?['resumeText'] as String?;
+      return stored != null && stored.trim() == resumeText.trim();
+    } catch (error) {
+    }
+    return false;
+  }
+
+  Future<bool> updateJobDescription({
+    required String jobDescription,
+    required String requestId,
+  }) async {
+    await AuthService.instance.ensureAuthenticated();
+    try {
+      await FirebaseFirestore.instance
+          .collection('resumeRequests')
+          .doc(requestId)
+          .set(
+        {
+          'jobDescription': jobDescription,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      return true;
+    } catch (error) {
+    }
+    return false;
+  }
+
   Future<bool> saveResumePreview({
     required ResumePreview preview,
     required String requestId,
   }) async {
-    await AuthService.instance.signInAnonymously();
+    await AuthService.instance.ensureAuthenticated();
     try {
       await FirebaseFirestore.instance.collection('resumePreviews').add({
         'keywordMatch': preview.keywordMatch,
@@ -67,27 +105,57 @@ class FirestoreService {
     required String jobDescription,
     required String requestId,
   }) async {
-    await AuthService.instance.signInAnonymously();
-    try {
-      final callable = FirebaseFunctions.instance.httpsCallable('tailorResume');
+    await AuthService.instance.ensureAuthenticated();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('Auth required');
+    }
+    await user.getIdToken(true);
+    await user.reload();
+    await FirebaseAuth.instance.idTokenChanges().firstWhere(
+      (u) => u?.uid == user.uid,
+    );
+    debugPrint('AI request start (uid=${user.uid})');
+    final callable = FirebaseFunctions.instanceFor(
+      app: Firebase.app(),
+      region: 'us-central1',
+    ).httpsCallable('generateTailoredResumeAI');
+    Future<Map<String, dynamic>?> _invoke() async {
       final result = await callable.call({
         'resumeText': resumeText,
         'jobDescription': jobDescription,
         'requestId': requestId,
       });
-      final data = result.data as Map<String, dynamic>?;
-      final tailored = data?['tailoredResume'] as Map<String, dynamic>?;
-      final keywordMatch = data?['keywordMatch'];
-      if (tailored == null) {
-        return null;
+      final data = result.data as Map<String, dynamic>;
+      debugPrint('AI response received');
+      if (data['status'] == 'error') {
+        throw Exception(data['message'] ?? 'AI failed');
+      }
+      if (!data.containsKey('tailoredResume')) {
+        throw Exception('AI response missing tailoredResume');
       }
       return {
-        ...tailored,
-        'keywordMatch': keywordMatch,
+        'keywordMatch': data['keywordMatch'],
+        ...((data['tailoredResume'] as Map).cast<String, dynamic>()),
       };
-    } on FirebaseFunctionsException catch (error) {
-    } catch (error) {
     }
-    return null;
+    try {
+      return await _invoke();
+    } on FirebaseFunctionsException catch (error) {
+      debugPrint('Callable error code: ${error.code}');
+      debugPrint('Callable error message: ${error.message}');
+      debugPrint('Callable error details: ${error.details}');
+      if (error.code == 'unauthenticated') {
+        await FirebaseAuth.instance.signOut();
+        await AuthService.instance.ensureAuthenticated();
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
+        return await _invoke();
+      }
+      final details = error.details;
+      if (details is Map && details['message'] != null) {
+        throw Exception(details['message']);
+      }
+      throw Exception(error.message ?? 'AI request failed');
+    }
   }
 }

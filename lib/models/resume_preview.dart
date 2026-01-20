@@ -20,42 +20,6 @@ class ResumePreview {
     };
   }
 
-  factory ResumePreview.mock() {
-    return ResumePreview(
-      name: 'John Doe',
-      role: 'Senior Software Engineer',
-      keywordMatch: 82,
-      sections: [
-        ResumeSection(
-          title: 'Professional Summary',
-          content:
-              'Experienced software engineer with 5+ years of expertise in mobile and web development. '
-              'Proven track record of delivering high-quality applications using Flutter, React, and Node.js.',
-        ),
-        ResumeSection(
-          title: 'Experience',
-          content:
-              'Senior Software Engineer | Tech Corp\n'
-              '2020 - Present\n'
-              '• Led development of mobile applications\n'
-              '• Implemented scalable backend solutions\n'
-              '• Collaborated with cross-functional teams',
-        ),
-        ResumeSection(
-          title: 'Education',
-          content:
-              'Bachelor of Science in Computer Science\n'
-              'University Name | 2016 - 2020',
-        ),
-        ResumeSection(
-          title: 'Skills',
-          content:
-              'Flutter, Dart, React, Node.js, JavaScript, TypeScript, Python, AWS, Git',
-        ),
-      ],
-    );
-  }
-
   factory ResumePreview.fromMap(Map<String, dynamic> map) {
     final sections = (map['sections'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../models/resume_preview.dart';
 import '../routes.dart';
 import '../services/firestore_service.dart';
@@ -14,6 +16,23 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   bool _isNavigating = false;
+  late final Razorpay _razorpay;
+  String? _currentOrderId;
+
+  @override
+  void initState() {
+    super.initState();
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+  }
+
+  @override
+  void dispose() {
+    _razorpay.clear();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +78,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   onPressed: _isNavigating || paid
                       ? null
                       : () async {
+                          if (kIsWeb) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Payments are not supported on web.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           setState(() {
                             _isNavigating = true;
                           });
@@ -77,29 +106,51 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             }
                             return;
                           }
-                          final marked = await PaymentService.instance.markPaid(
+                          final order =
+                              await PaymentService.instance.createPaymentOrder(
                             requestId: requestId,
+                            amount: 9900,
+                            currency: 'INR',
                           );
-                          if (!marked && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Payment failed. Try again.'),
-                              ),
-                            );
+                          if (order == null) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Payment failed. Try again.'),
+                                ),
+                              );
+                              setState(() {
+                                _isNavigating = false;
+                              });
+                            }
+                            return;
                           }
-                          await Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.success,
-                            arguments: {
-                              'preview': preview,
-                              'requestId': requestId,
-                            },
-                          );
-                          if (mounted) {
-                            setState(() {
-                              _isNavigating = false;
-                            });
+                          _currentOrderId = order['orderId'] as String?;
+                          final keyId = order['keyId'] as String?;
+                          final amount = order['amount'] as int? ?? 9900;
+                          final currency =
+                              order['currency'] as String? ?? 'INR';
+                          if (_currentOrderId == null || keyId == null) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Payment failed. Try again.'),
+                                ),
+                              );
+                              setState(() {
+                                _isNavigating = false;
+                              });
+                            }
+                            return;
                           }
+                          final options = {
+                            'key': keyId,
+                            'amount': amount,
+                            'currency': currency,
+                            'name': 'Resume Tailor',
+                            'order_id': _currentOrderId,
+                          };
+                          _razorpay.open(options);
                         },
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF001F3F),
@@ -134,5 +185,78 @@ class _PaymentScreenState extends State<PaymentScreen> {
       ),
     );
   }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final preview = args?['preview'] as ResumePreview?;
+    final requestId = args?['requestId'] as String?;
+    if (requestId == null ||
+        response.paymentId == null ||
+        response.signature == null ||
+        _currentOrderId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment verification failed.'),
+          ),
+        );
+        setState(() {
+          _isNavigating = false;
+        });
+      }
+      return;
+    }
+    final verified = await PaymentService.instance.verifyPayment(
+      requestId: requestId,
+      orderId: _currentOrderId!,
+      paymentId: response.paymentId!,
+      signature: response.signature!,
+    );
+    if (!verified) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment verification failed.'),
+          ),
+        );
+        setState(() {
+          _isNavigating = false;
+        });
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    await Navigator.pushReplacementNamed(
+      context,
+      AppRoutes.success,
+      arguments: {
+        'preview': preview,
+        'requestId': requestId,
+      },
+    );
+    if (mounted) {
+      setState(() {
+        _isNavigating = false;
+      });
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment failed. Try again.'),
+        ),
+      );
+      setState(() {
+        _isNavigating = false;
+      });
+    }
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {}
 
 }

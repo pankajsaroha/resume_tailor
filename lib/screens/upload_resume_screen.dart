@@ -1,5 +1,10 @@
+import 'dart:math';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../routes.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+import '../services/resume_text_extractor.dart';
 
 class UploadResumeScreen extends StatefulWidget {
   const UploadResumeScreen({super.key});
@@ -10,13 +15,82 @@ class UploadResumeScreen extends StatefulWidget {
 
 class _UploadResumeScreenState extends State<UploadResumeScreen> {
   bool _isUploaded = false;
-  String _fileName = 'resume.pdf';
+  String _fileName = '';
+  String _resumeText = '';
+  String _requestId = '';
   bool _isNavigating = false;
 
-  void _handleUpload() {
+  @override
+  void initState() {
+    super.initState();
+    AuthService.instance.ensureAuthenticated();
+  }
+
+  Future<void> _handleUpload() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'docx'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      return;
+    }
+    final resumeText = await ResumeTextExtractor.extractText(
+      bytes: bytes,
+      fileName: file.name,
+    );
+    if (resumeText.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not read resume text. Try another file.'),
+          ),
+        );
+      }
+      return;
+    }
+    final requestId = _generateRequestId();
+    final saved = await FirestoreService.instance.createRequestWithResumeText(
+      resumeText: resumeText,
+      requestId: requestId,
+    );
+    if (!saved && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Network error. Try again.'),
+        ),
+      );
+      return;
+    }
+    final verified = await FirestoreService.instance.verifyResumeTextStored(
+      requestId: requestId,
+      resumeText: resumeText,
+    );
+    if (!verified && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upload verification failed. Try again.'),
+        ),
+      );
+      return;
+    }
     setState(() {
+      _fileName = file.name;
+      _resumeText = resumeText;
+      _requestId = requestId;
       _isUploaded = true;
     });
+  }
+
+  String _generateRequestId() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rand = Random().nextInt(1000000).toString().padLeft(6, '0');
+    return 'req_$now$rand';
   }
 
   @override
@@ -90,6 +164,10 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
                           await Navigator.pushReplacementNamed(
                             context,
                             AppRoutes.jobDescription,
+                            arguments: {
+                              'requestId': _requestId,
+                              'resumeText': _resumeText,
+                            },
                           );
                           if (mounted) {
                             setState(() {

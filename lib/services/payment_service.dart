@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'auth_service.dart';
 
 class PaymentService {
@@ -7,22 +5,22 @@ class PaymentService {
 
   static final PaymentService instance = PaymentService._();
 
-  Future<bool> markPaid({required String requestId}) async {
-    await AuthService.instance.signInAnonymously();
-    try {
-      await FirebaseFirestore.instance
-          .collection('resumeRequests')
-          .doc(requestId)
-          .set(
-        {
-          'paid': true,
-          'paidAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      return true;
-    } catch (error) {
-    }
+  Future<Map<String, dynamic>?> createPaymentOrder({
+    required String requestId,
+    required int amount,
+    required String currency,
+  }) async {
+    await AuthService.instance.ensureAuthenticated();
+    return null;
+  }
+
+  Future<bool> verifyPayment({
+    required String requestId,
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) async {
+    await AuthService.instance.ensureAuthenticated();
     return false;
   }
 }
