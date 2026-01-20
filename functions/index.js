@@ -139,6 +139,11 @@ exports.createPaymentOrder = onCall(
         currency,
         receipt: `receipt_${requestId}`,
       });
+      console.log("createPaymentOrder: order created", {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      });
 
       return {
         orderId: order.id,
@@ -147,6 +152,7 @@ exports.createPaymentOrder = onCall(
         keyId: RAZORPAY_KEY_ID.value(),
       };
     } catch (err) {
+      console.error("createPaymentOrder: error", err);
       throw new HttpsError("internal", "Order creation failed");
     }
   }
@@ -174,7 +180,11 @@ exports.verifyPayment = onCall(
       .digest("hex");
 
     if (expectedSignature !== signature) {
-      return { verified: false };
+      console.error("verifyPayment: signature mismatch", {
+        orderId,
+        paymentId,
+      });
+      return { verified: false, message: "Signature mismatch" };
     }
 
     await admin
@@ -190,6 +200,7 @@ exports.verifyPayment = onCall(
         { merge: true }
       );
 
+    console.log("verifyPayment: success", { requestId, orderId, paymentId });
     return { verified: true };
   }
 );

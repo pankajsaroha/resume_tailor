@@ -1,4 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
 
@@ -14,21 +16,28 @@ class PaymentService {
   }) async {
     await AuthService.instance.ensureAuthenticated();
     try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('createPaymentOrder');
+      final callable = FirebaseFunctions.instanceFor(
+        app: Firebase.app(),
+        region: 'us-central1',
+      ).httpsCallable('createPaymentOrder');
       final result = await callable.call({
         'requestId': requestId,
         'amount': amount,
         'currency': currency,
       });
-      return result.data as Map<String, dynamic>?;
-    } on FirebaseFunctionsException {
+      final data = result.data as Map<String, dynamic>?;
+      debugPrint('createPaymentOrder response: $data');
+      return data;
+    } on FirebaseFunctionsException catch (error) {
+      debugPrint('createPaymentOrder error: ${error.code} ${error.message}');
+      debugPrint('createPaymentOrder details: ${error.details}');
     } catch (error) {
+      debugPrint('createPaymentOrder error: $error');
     }
     return null;
   }
 
-  Future<bool> verifyPayment({
+  Future<Map<String, dynamic>> verifyPayment({
     required String requestId,
     required String orderId,
     required String paymentId,
@@ -36,8 +45,10 @@ class PaymentService {
   }) async {
     await AuthService.instance.ensureAuthenticated();
     try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('verifyPayment');
+      final callable = FirebaseFunctions.instanceFor(
+        app: Firebase.app(),
+        region: 'us-central1',
+      ).httpsCallable('verifyPayment');
       final result = await callable.call({
         'requestId': requestId,
         'orderId': orderId,
@@ -45,9 +56,25 @@ class PaymentService {
         'signature': signature,
       });
       final data = result.data as Map<String, dynamic>?;
-      return data?['verified'] == true;
+      debugPrint('verifyPayment response: $data');
+      return data ?? {'verified': false, 'message': 'Payment failed'};
+    } on FirebaseFunctionsException catch (error) {
+      debugPrint('verifyPayment error: ${error.code} ${error.message}');
+      debugPrint('verifyPayment details: ${error.details}');
+      final details = error.details;
+      if (details is Map && details['message'] != null) {
+        return {
+          'verified': false,
+          'message': details['message'],
+        };
+      }
+      return {
+        'verified': false,
+        'message': error.message ?? 'Payment failed',
+      };
     } catch (error) {
+      debugPrint('verifyPayment error: $error');
     }
-    return false;
+    return {'verified': false, 'message': 'Payment failed'};
   }
 }

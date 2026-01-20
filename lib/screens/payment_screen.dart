@@ -58,7 +58,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
               const Text(
-                '₹99',
+                '₹9',
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
@@ -109,7 +109,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           final order =
                               await PaymentService.instance.createPaymentOrder(
                             requestId: requestId,
-                            amount: 9900,
+                            amount: 900,
                             currency: 'INR',
                           );
                           if (order == null) {
@@ -125,9 +125,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             }
                             return;
                           }
+                          debugPrint('Order creation response: $order');
                           _currentOrderId = order['orderId'] as String?;
                           final keyId = order['keyId'] as String?;
-                          final amount = order['amount'] as int? ?? 9900;
+                          final amount = order['amount'] as int? ?? 900;
                           final currency =
                               order['currency'] as String? ?? 'INR';
                           if (_currentOrderId == null || keyId == null) {
@@ -207,17 +208,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
       return;
     }
-    final verified = await PaymentService.instance.verifyPayment(
+    debugPrint('Razorpay success: '
+        'paymentId=${response.paymentId}, '
+        'orderId=$_currentOrderId, '
+        'signature=${response.signature}');
+    final verification = await PaymentService.instance.verifyPayment(
       requestId: requestId,
       orderId: _currentOrderId!,
       paymentId: response.paymentId!,
       signature: response.signature!,
     );
-    if (!verified) {
+    debugPrint('verifyPayment response: $verification');
+    if (verification['verified'] != true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment verification failed.'),
+          SnackBar(
+            content: Text(
+              verification['message']?.toString() ??
+                  'Payment verification failed.',
+            ),
           ),
         );
         setState(() {
@@ -231,7 +240,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
     await Navigator.pushReplacementNamed(
       context,
-      AppRoutes.success,
+      AppRoutes.preview,
       arguments: {
         'preview': preview,
         'requestId': requestId,
@@ -245,10 +254,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
+    debugPrint(
+      'Razorpay error: code=${response.code} message=${response.message}',
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment failed. Try again.'),
+        SnackBar(
+          content: Text(
+            response.message?.isNotEmpty == true
+                ? response.message!
+                : 'Payment failed. Try again.',
+          ),
         ),
       );
       setState(() {

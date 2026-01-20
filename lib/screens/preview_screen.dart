@@ -211,7 +211,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         ),
                       )
                     : const Text(
-                        'Download ₹99',
+                        'Download ₹9',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
