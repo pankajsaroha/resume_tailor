@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -25,25 +24,14 @@ class PdfService {
       final notoFont = pw.Font.ttf(
         await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
       );
-      final baseTextStyle = pw.TextStyle(
-        font: notoFont,
-        fontFallback: [notoFont],
-        fontSize: 14,
-      );
-      final originalText = await _loadOriginalResumeText(requestId);
-      final mergedText = _mergeResumeText(originalText, preview);
+      final orderedSections = preview.orderedSections();
       doc.addPage(
         pw.MultiPage(
           build: (context) {
             return [
               pw.Padding(
                 padding: const pw.EdgeInsets.all(24),
-                child: mergedText.trim().isEmpty
-                    ? _buildFromPreview(preview, notoFont)
-                    : pw.Text(
-                        mergedText,
-                        style: baseTextStyle,
-                      ),
+                child: _buildFromPreview(preview, orderedSections, notoFont),
               ),
             ];
           },
@@ -90,7 +78,11 @@ class PdfService {
     }
   }
 
-  static pw.Widget _buildFromPreview(ResumePreview preview, pw.Font font) {
+  static pw.Widget _buildFromPreview(
+    ResumePreview preview,
+    List<ResumeSection> sections,
+    pw.Font font,
+  ) {
     pw.TextStyle styled(pw.TextStyle style) {
       return style.copyWith(
         font: font,
@@ -123,7 +115,7 @@ class PdfService {
         pw.SizedBox(height: 16),
         pw.Divider(),
         pw.SizedBox(height: 16),
-        for (final section in preview.sections) ...[
+        for (final section in sections) ...[
           pw.Text(
             section.title,
             style: styled(
@@ -144,66 +136,5 @@ class PdfService {
         ],
       ],
     );
-  }
-
-  static Future<String> _loadOriginalResumeText(String requestId) async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('resumeRequests')
-          .doc(requestId)
-          .get();
-      return doc.data()?['resumeText'] as String? ?? '';
-    } catch (error) {
-      return '';
-    }
-  }
-
-  static String _mergeResumeText(String original, ResumePreview preview) {
-    if (original.trim().isEmpty || preview.sections.isEmpty) {
-      return original;
-    }
-    final sectionsByTitle = <String, ResumeSection>{};
-    for (final section in preview.sections) {
-      final key = section.title.trim().toLowerCase();
-      if (key.isNotEmpty && !sectionsByTitle.containsKey(key)) {
-        sectionsByTitle[key] = section;
-      }
-    }
-    if (sectionsByTitle.isEmpty) {
-      return original;
-    }
-    final lines = original.split('\n');
-    final titleIndices = <int>[];
-    for (var i = 0; i < lines.length; i++) {
-      final key = lines[i].trim().toLowerCase();
-      if (sectionsByTitle.containsKey(key)) {
-        titleIndices.add(i);
-      }
-    }
-    if (titleIndices.isEmpty) {
-      return original;
-    }
-    final output = <String>[];
-    var i = 0;
-    while (i < lines.length) {
-      final key = lines[i].trim().toLowerCase();
-      if (sectionsByTitle.containsKey(key)) {
-        output.add(lines[i]);
-        final section = sectionsByTitle[key];
-        if (section != null && section.content.trim().isNotEmpty) {
-          output.addAll(section.content.split('\n'));
-        }
-        final nextIndex = titleIndices
-            .firstWhere((idx) => idx > i, orElse: () => lines.length);
-        if (nextIndex >= lines.length) {
-          break;
-        }
-        i = nextIndex;
-        continue;
-      }
-      output.add(lines[i]);
-      i++;
-    }
-    return output.join('\n');
   }
 }

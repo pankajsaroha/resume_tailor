@@ -35,7 +35,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       'Preview keywordMatch=${preview.keywordMatch} sections=${preview.sections.length}',
     );
 
-    final sections = preview.sections;
+    final sections = preview.orderedSections();
     final ResumeSection? firstSection =
         sections.isNotEmpty ? sections.first : null;
     final List<ResumeSection> blurredSections =
