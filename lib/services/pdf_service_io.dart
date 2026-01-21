@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -19,28 +20,36 @@ class PdfService {
     final originalText = await _loadOriginalResumeText(requestId);
     final mergedText = _mergeResumeText(originalText, preview);
     doc.addPage(
-      pw.Page(
+      pw.MultiPage(
         build: (context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(24),
-            child: mergedText.trim().isEmpty
-                ? _buildFromPreview(preview)
-                : pw.Text(
-                    mergedText,
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-          );
+          return [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(24),
+              child: mergedText.trim().isEmpty
+                  ? _buildFromPreview(preview)
+                  : pw.Text(
+                      mergedText,
+                      style: const pw.TextStyle(fontSize: 11),
+                    ),
+            ),
+          ];
         },
       ),
     );
 
     final bytes = await doc.save();
     if (Platform.isAndroid) {
-      final downloadsDir = await getDownloadsDirectory();
-      final dir = downloadsDir ?? await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/resume_$requestId.pdf');
-      await file.writeAsBytes(bytes);
-      return 'Saved to ${file.path}';
+      final fileName = 'resume_$requestId';
+      final result = await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: bytes,
+        ext: 'pdf',
+        mimeType: MimeType.pdf,
+      );
+      if (result == null || result.isEmpty) {
+        return 'Download cancelled';
+      }
+      return 'Saved $fileName.pdf';
     }
 
     final dir = await getApplicationDocumentsDirectory();

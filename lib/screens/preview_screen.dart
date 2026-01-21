@@ -187,27 +187,49 @@ class _PreviewScreenState extends State<PreviewScreen> {
                             setState(() {
                               _isNavigating = true;
                             });
-                            if (paid) {
-                              if (requestId != null) {
-                                await PdfService.generateAndSave(
-                                  preview: preview,
-                                  requestId: requestId,
+                            try {
+                              if (paid) {
+                                if (requestId != null) {
+                                  final result = await PdfService.generateAndSave(
+                                    preview: preview,
+                                    requestId: requestId,
+                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(result)),
+                                    );
+                                  }
+                                } else if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Missing request data.'),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                await Navigator.pushReplacementNamed(
+                                  context,
+                                  AppRoutes.payment,
+                                  arguments: {
+                                    'preview': preview,
+                                    'requestId': requestId,
+                                  },
                                 );
                               }
-                            } else {
-                              await Navigator.pushReplacementNamed(
-                                context,
-                                AppRoutes.payment,
-                                arguments: {
-                                  'preview': preview,
-                                  'requestId': requestId,
-                                },
-                              );
-                            }
-                            if (mounted) {
-                              setState(() {
-                                _isNavigating = false;
-                              });
+                            } catch (error) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Download failed.'),
+                                  ),
+                                );
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() {
+                                  _isNavigating = false;
+                                });
+                              }
                             }
                           },
                     style: FilledButton.styleFrom(
