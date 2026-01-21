@@ -1,84 +1,123 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_saver/file_saver.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:share_plus/share_plus.dart';
+import 'package:printing/printing.dart';
 
 import '../models/resume_preview.dart';
 
 class PdfService {
   PdfService._();
 
+  static const MethodChannel _safChannel =
+      MethodChannel('resume_tailor/saf');
+
   static Future<String> generateAndSave({
     required ResumePreview preview,
     required String requestId,
   }) async {
-    final doc = pw.Document();
-    final originalText = await _loadOriginalResumeText(requestId);
-    final mergedText = _mergeResumeText(originalText, preview);
-    doc.addPage(
-      pw.MultiPage(
-        build: (context) {
-          return [
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(24),
-              child: mergedText.trim().isEmpty
-                  ? _buildFromPreview(preview)
-                  : pw.Text(
-                      mergedText,
-                      style: const pw.TextStyle(fontSize: 11),
-                    ),
-            ),
-          ];
-        },
-      ),
-    );
-
-    final bytes = await doc.save();
-    if (Platform.isAndroid) {
-      final fileName = 'resume_$requestId';
-      final result = await FileSaver.instance.saveFile(
-        name: fileName,
-        bytes: bytes,
-        ext: 'pdf',
-        mimeType: MimeType.pdf,
+    try {
+      print('PDF build started');
+      final doc = pw.Document();
+      final notoFont = pw.Font.ttf(
+        await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
       );
-      if (result == null || result.isEmpty) {
-        return 'Download cancelled';
-      }
-      return 'Saved $fileName.pdf';
-    }
+      final baseTextStyle = pw.TextStyle(
+        font: notoFont,
+        fontFallback: [notoFont],
+        fontSize: 14,
+      );
+      final originalText = await _loadOriginalResumeText(requestId);
+      final mergedText = _mergeResumeText(originalText, preview);
+      doc.addPage(
+        pw.MultiPage(
+          build: (context) {
+            return [
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(24),
+                child: mergedText.trim().isEmpty
+                    ? _buildFromPreview(preview, notoFont)
+                    : pw.Text(
+                        mergedText,
+                        style: baseTextStyle,
+                      ),
+              ),
+            ];
+          },
+        ),
+      );
+      print('PDF page added');
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/resume_$requestId.pdf');
-    await file.writeAsBytes(bytes);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Your tailored resume PDF',
-    );
-    return 'Share sheet opened';
+      final bytes = await doc.save();
+      final fileName = 'resume_$requestId.pdf';
+      if (kIsWeb) {
+        await Printing.layoutPdf(
+          onLayout: (format) async => bytes,
+          name: fileName,
+        );
+        print('PDF saved to path: web');
+        return 'Download started';
+      }
+
+      if (Platform.isAndroid) {
+        final result = await _safChannel.invokeMethod<String>(
+          'savePdf',
+          {
+            'name': fileName,
+            'bytes': bytes,
+          },
+        );
+        if (result == null || result.isEmpty) {
+          return 'Download cancelled';
+        }
+        print('PDF saved to path: $result');
+        return 'Saved $fileName';
+      }
+
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: fileName,
+      );
+      print('PDF saved to path: share');
+      return 'Share sheet opened';
+    } catch (error, stackTrace) {
+      print(error);
+      print(stackTrace);
+      rethrow;
+    }
   }
 
-  static pw.Widget _buildFromPreview(ResumePreview preview) {
+  static pw.Widget _buildFromPreview(ResumePreview preview, pw.Font font) {
+    pw.TextStyle styled(pw.TextStyle style) {
+      return style.copyWith(
+        font: font,
+        fontFallback: [font],
+      );
+    }
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
           preview.name,
-          style: pw.TextStyle(
+          style: styled(
+            pw.TextStyle(
             fontSize: 28,
             fontWeight: pw.FontWeight.bold,
+          ),
           ),
         ),
         pw.SizedBox(height: 4),
         pw.Text(
           preview.role,
-          style: pw.TextStyle(
+          style: styled(
+            pw.TextStyle(
             fontSize: 16,
             color: PdfColors.grey700,
+          ),
           ),
         ),
         pw.SizedBox(height: 16),
@@ -87,15 +126,19 @@ class PdfService {
         for (final section in preview.sections) ...[
           pw.Text(
             section.title,
-            style: pw.TextStyle(
+            style: styled(
+              pw.TextStyle(
               fontSize: 16,
               fontWeight: pw.FontWeight.bold,
+            ),
             ),
           ),
           pw.SizedBox(height: 8),
           pw.Text(
             section.content,
-            style: const pw.TextStyle(fontSize: 12),
+            style: styled(
+              const pw.TextStyle(fontSize: 12),
+            ),
           ),
           pw.SizedBox(height: 16),
         ],
